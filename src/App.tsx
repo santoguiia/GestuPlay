@@ -9,18 +9,23 @@
  *  "error"    → Camera permission denied or other initialisation failure
  */
 import { useState, useCallback, useMemo } from "react";
+import type { ComponentType } from "react";
 import { VisionManager } from "./core/VisionManager";
-import { SlingshotGame } from "./games/SlingshotGame";
 import type { IGestuGame } from "./core/IGestuGame";
 import { GameCanvas } from "./components/GameCanvas";
 import { VirtualCursor } from "./components/VirtualCursor";
 import { DwellButton } from "./components/DwellButton";
+import GeminiSlingshot from "./games/geminiSlingshot/components/GeminiSlingshot";
 import "./App.css";
 
 type AppState = "idle" | "loading" | "playing" | "error";
 
-const GAMES: { id: string; label: string; factory: () => IGestuGame }[] = [
-  { id: "slingshot", label: "🎯 Bubble Slingshot", factory: () => new SlingshotGame() },
+type GameDefinition =
+  | { id: string; label: string; engine: "canvas"; factory: () => IGestuGame }
+  | { id: string; label: string; engine: "component"; component: ComponentType };
+
+const GAMES: GameDefinition[] = [
+  { id: "slingshot", label: "🎯 Gemini Slingshot", engine: "component", component: GeminiSlingshot },
 ];
 
 export default function App() {
@@ -28,13 +33,26 @@ export default function App() {
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>("");
 
-  const activeGame = useMemo(() => {
+  const activeGameDef = useMemo(() => {
     if (!activeGameId) return null;
-    const def = GAMES.find((g) => g.id === activeGameId);
-    return def ? def.factory() : null;
+    return GAMES.find((g) => g.id === activeGameId) ?? null;
   }, [activeGameId]);
 
+  const activeCanvasGame = useMemo(() => {
+    if (!activeGameDef || activeGameDef.engine !== "canvas") return null;
+    return activeGameDef.factory();
+  }, [activeGameDef]);
+
   const startGame = useCallback(async (gameId: string) => {
+    const game = GAMES.find((g) => g.id === gameId);
+    if (!game) return;
+
+    if (game.engine === "component") {
+      setActiveGameId(gameId);
+      setAppState("playing");
+      return;
+    }
+
     setAppState("loading");
     try {
       const vm = VisionManager.getInstance();
@@ -50,15 +68,22 @@ export default function App() {
   }, []);
 
   const stopGame = useCallback(() => {
-    VisionManager.getInstance().stop();
+    if (activeGameDef?.engine === "canvas") {
+      VisionManager.getInstance().stop();
+    }
     setActiveGameId(null);
     setAppState("idle");
-  }, []);
+  }, [activeGameDef]);
+
+  const ActiveComponentGame =
+    activeGameDef && activeGameDef.engine === "component"
+      ? activeGameDef.component
+      : null;
 
   return (
     <div className="app">
       {/* ── Overlay: Virtual Cursor (shown while playing) ─────────────────── */}
-      {appState === "playing" && <VirtualCursor />}
+      {appState === "playing" && activeGameDef?.engine === "canvas" && <VirtualCursor />}
 
       {/* ── Screen: Idle / Hub ─────────────────────────────────────────────── */}
       {appState === "idle" && (
@@ -111,9 +136,13 @@ export default function App() {
       )}
 
       {/* ── Screen: Playing ───────────────────────────────────────────────── */}
-      {appState === "playing" && activeGame && (
+      {appState === "playing" && activeGameDef && (
         <div className="screen screen--playing">
-          <GameCanvas game={activeGame} />
+          {activeGameDef.engine === "canvas" && activeCanvasGame ? (
+            <GameCanvas game={activeCanvasGame} />
+          ) : ActiveComponentGame ? (
+            <ActiveComponentGame />
+          ) : null}
           <button className="back-btn" onClick={stopGame} title="Back to hub">
             ← Hub
           </button>
