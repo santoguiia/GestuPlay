@@ -212,6 +212,14 @@ const GeminiSlingshot: React.FC = () => {
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+      // Draw camera feed as background with reduced opacity
+      ctx.globalAlpha = 0.45;
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1.0;
+      // Semi-transparent dark overlay so game elements pop
+      ctx.fillStyle = 'rgba(18, 18, 18, 0.6)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       let handPos: Point | null = null;
       let pinchDist = 1.0;
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
@@ -361,32 +369,45 @@ const GeminiSlingshot: React.FC = () => {
       ctx.restore();
     };
 
-    const HandsCtor = window.Hands ?? (globalThis as any).Hands;
-    const CameraCtor = window.Camera ?? (globalThis as any).Camera;
-    if (HandsCtor) {
+    // Poll for MediaPipe globals in case CDN scripts are still loading
+    let pollId: ReturnType<typeof setTimeout>;
+    let destroyed = false;
+
+    const startMediaPipe = () => {
+      const HandsCtor = (window as any).Hands ?? (globalThis as any).Hands;
+      const CameraCtor = (window as any).Camera ?? (globalThis as any).Camera;
+
+      if (!HandsCtor || !CameraCtor) {
+        // Retry after 300ms until scripts load (max ~10s)
+        pollId = setTimeout(() => { if (!destroyed) startMediaPipe(); }, 300);
+        return;
+      }
+
       hands = new HandsCtor({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}` });
       hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.55, minTrackingConfidence: 0.55 });
       hands.onResults(onResults);
-      if (CameraCtor) {
-        camera = new CameraCtor(video, {
-          onFrame: async () => {
-            if (!videoRef.current || !hands || frameInFlightRef.current) return;
-            frameInFlightRef.current = true;
-            try {
-              await hands.send({ image: videoRef.current });
-            } finally {
-              frameInFlightRef.current = false;
-            }
-          },
-          width: 960,
-          height: 540
-        });
-        camera.start();
-      }
-    } else {
-      setLoading(false);
-    }
+
+      camera = new CameraCtor(video, {
+        onFrame: async () => {
+          if (!videoRef.current || !hands || frameInFlightRef.current) return;
+          frameInFlightRef.current = true;
+          try {
+            await hands.send({ image: videoRef.current });
+          } finally {
+            frameInFlightRef.current = false;
+          }
+        },
+        width: 960,
+        height: 540
+      });
+      camera.start();
+    };
+
+    startMediaPipe();
+
     return () => {
+      destroyed = true;
+      clearTimeout(pollId);
       frameInFlightRef.current = false;
       if (camera) camera.stop();
       if (hands) hands.close();
@@ -398,13 +419,7 @@ const GeminiSlingshot: React.FC = () => {
       
       {/* GAME AREA */}
       <div ref={gameContainerRef} className="relative h-full overflow-hidden">
-        <video
-          ref={videoRef}
-          className="absolute inset-0 z-0 w-full h-full object-cover opacity-45 pointer-events-none"
-          playsInline
-          muted
-          autoPlay
-        />
+        <video ref={videoRef} className="absolute hidden" playsInline />
         <canvas ref={canvasRef} className="absolute inset-0 z-10" />
 
         {loading && (
