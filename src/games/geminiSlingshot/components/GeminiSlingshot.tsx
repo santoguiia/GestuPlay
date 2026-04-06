@@ -6,10 +6,8 @@
 */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { getStrategicHint } from '../services/geminiService';
-import type { TargetCandidate } from '../services/geminiService';
-import type { Point, Bubble, Particle, BubbleColor, DebugInfo } from '../types';
-import { Loader2, Trophy, BrainCircuit, Play, MousePointerClick, Eye, Terminal, Target, Lightbulb, X } from 'lucide-react';
+import type { Point, Bubble, Particle, BubbleColor } from '../types';
+import { Loader2, Trophy, Play, MousePointerClick } from 'lucide-react';
 
 const GRAB_THRESHOLD = 0.05; // Limite para agarrar (dedos bem próximos)
 const RELEASE_THRESHOLD = 0.12; // Limite para soltar (mais folgado para evitar erros)
@@ -65,37 +63,18 @@ const GeminiSlingshot: React.FC = () => {
   const bubbles = useRef<Bubble[]>([]);
   const particles = useRef<Particle[]>([]);
   const scoreRef = useRef<number>(0);
-  
-  const aimTargetRef = useRef<Point | null>(null);
-  const isAiThinkingRef = useRef<boolean>(false);
-  const captureRequestRef = useRef<boolean>(false);
 
   const selectedColorRef = useRef<BubbleColor>('red');
   
   const [loading, setLoading] = useState(true);
-  const [aiHint, setAiHint] = useState<string | null>("Initializing strategy engine...");
-  const [aiRationale, setAiRationale] = useState<string | null>(null);
-  const [aimTarget, setAimTarget] = useState<Point | null>(null);
   const [score, setScore] = useState(0);
-  const [isAiThinking, setIsAiThinking] = useState(false);
   const [selectedColor, setSelectedColor] = useState<BubbleColor>('red');
   const [availableColors, setAvailableColors] = useState<BubbleColor[]>([]);
-  const [aiRecommendedColor, setAiRecommendedColor] = useState<BubbleColor | null>(null);
-  const [debugInfo, setDebugInfo] = useState<DebugInfo | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     selectedColorRef.current = selectedColor;
   }, [selectedColor]);
 
-  useEffect(() => {
-    aimTargetRef.current = aimTarget;
-  }, [aimTarget]);
-
-  useEffect(() => {
-    isAiThinkingRef.current = isAiThinking;
-  }, [isAiThinking]);
-  
   const getBubblePos = (row: number, col: number, width: number) => {
     const xOffset = (width - (GRID_COLS * BUBBLE_RADIUS * 2)) / 2 + BUBBLE_RADIUS;
     const isOdd = row % 2 !== 0;
@@ -135,7 +114,6 @@ const GeminiSlingshot: React.FC = () => {
     }
     bubbles.current = newBubbles;
     updateAvailableColors();
-    setTimeout(() => { captureRequestRef.current = true; }, 2000);
   }, []);
 
   const createExplosion = (x: number, y: number, color: string) => {
@@ -148,61 +126,6 @@ const GeminiSlingshot: React.FC = () => {
         color
       });
     }
-  };
-
-  const isPathClear = (target: Bubble) => {
-    if (!anchorPos.current) return false;
-    const startX = anchorPos.current.x;
-    const startY = anchorPos.current.y;
-    const dx = target.x - startX;
-    const dy = target.y - startY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const steps = Math.ceil(distance / (BUBBLE_RADIUS / 2)); 
-    for (let i = 1; i < steps - 2; i++) { 
-        const t = i / steps;
-        const cx = startX + dx * t;
-        const cy = startY + dy * t;
-        for (const b of bubbles.current) {
-            if (!b.active || b.id === target.id) continue;
-            const distSq = Math.pow(cx - b.x, 2) + Math.pow(cy - b.y, 2);
-            if (distSq < Math.pow(BUBBLE_RADIUS * 1.7, 2)) return false; 
-        }
-    }
-    return true;
-  };
-
-  const getAllReachableClusters = (): TargetCandidate[] => {
-    const activeBubbles = bubbles.current.filter(b => b.active);
-    const uniqueColors = Array.from(new Set(activeBubbles.map(b => b.color))) as BubbleColor[];
-    const allClusters: TargetCandidate[] = [];
-    for (const color of uniqueColors) {
-        const visited = new Set<string>();
-        for (const b of activeBubbles) {
-            if (b.color !== color || visited.has(b.id)) continue;
-            const clusterMembers: Bubble[] = [];
-            const queue = [b];
-            visited.add(b.id);
-            while (queue.length > 0) {
-                const curr = queue.shift()!;
-                clusterMembers.push(curr);
-                const neighbors = activeBubbles.filter(n => !visited.has(n.id) && n.color === color && isNeighbor(curr, n));
-                neighbors.forEach(n => { visited.add(n.id); queue.push(n); });
-            }
-            clusterMembers.sort((a,b) => b.y - a.y); 
-            const hittableMember = clusterMembers.find(m => isPathClear(m));
-            if (hittableMember) {
-                const xPct = hittableMember.x / (gameContainerRef.current?.clientWidth || window.innerWidth);
-                let desc = "Center";
-                if (xPct < 0.33) desc = "Left"; else if (xPct > 0.66) desc = "Right";
-                allClusters.push({
-                    id: hittableMember.id, color, size: clusterMembers.length,
-                    row: hittableMember.row, col: hittableMember.col,
-                    pointsPerBubble: COLOR_CONFIG[color].points, description: desc
-                });
-            }
-        }
-    }
-    return allClusters;
   };
 
   const checkMatches = (startBubble: Bubble) => {
@@ -241,30 +164,6 @@ const GeminiSlingshot: React.FC = () => {
     if (Math.abs(dr) > 1) return false;
     if (dr === 0) return Math.abs(dc) === 1;
     return a.row % 2 !== 0 ? (dc === 0 || dc === 1) : (dc === -1 || dc === 0);
-  };
-
-  const performAiAnalysis = async (screenshot: string) => {
-    isAiThinkingRef.current = true;
-    setIsAiThinking(true);
-    setAiHint("Analyzing tactical options...");
-    const allClusters = getAllReachableClusters();
-    const maxRow = bubbles.current.reduce((max, b) => b.active ? Math.max(max, b.row) : max, 0);
-    const canvasWidth = canvasRef.current?.width || 1000;
-    getStrategicHint(screenshot, allClusters, maxRow).then(aiResponse => {
-        const { hint, debug } = aiResponse;
-        setDebugInfo(debug);
-        setAiHint(hint.message);
-        setAiRationale(hint.rationale || null);
-        if (typeof hint.targetRow === 'number' && typeof hint.targetCol === 'number') {
-            if (hint.recommendedColor) {
-                setAiRecommendedColor(hint.recommendedColor);
-                setSelectedColor(hint.recommendedColor);
-            }
-            setAimTarget(getBubblePos(hint.targetRow, hint.targetCol, canvasWidth));
-        }
-        isAiThinkingRef.current = false;
-        setIsAiThinking(false);
-    });
   };
 
   const drawBubble = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, colorKey: BubbleColor) => {
@@ -339,10 +238,8 @@ const GeminiSlingshot: React.FC = () => {
         handLossCounter.current++;
       }
       
-      const isLocked = isAiThinkingRef.current;
-      
       // LOGICA DE PINÇA COM HISTERESE
-      if (!isLocked && handPos && !isFlying.current) {
+      if (handPos && !isFlying.current) {
         if (!isPinching.current) {
           // Só começa a segurar se os dedos estiverem MUITO próximos e perto da bola
           const distToBall = Math.sqrt(Math.pow(handPos.x - ballPos.current.x, 2) + Math.pow(handPos.y - ballPos.current.y, 2));
@@ -365,27 +262,23 @@ const GeminiSlingshot: React.FC = () => {
              }
           }
         }
-      } else if (isPinching.current && (handLossCounter.current > HAND_LOSS_TOLERANCE || isLocked)) {
+      } else if (isPinching.current && handLossCounter.current > HAND_LOSS_TOLERANCE) {
         // Solta a bola se a mão sumir por muito tempo ou se o sistema travar
         isPinching.current = false;
         handleLaunch();
       }
 
       function handleLaunch() {
-        if (!isLocked) {
-          const dx = anchorPos.current.x - ballPos.current.x, dy = anchorPos.current.y - ballPos.current.y;
-          const stretchDist = Math.sqrt(dx*dx + dy*dy);
-          if (stretchDist > 40) { // Mínimo de força para lançar
-              isFlying.current = true;
-              flightStartTime.current = performance.now();
-              const powerRatio = Math.min(stretchDist / MAX_DRAG_DIST, 1.0);
-              const velocityMultiplier = MIN_FORCE_MULT + (MAX_FORCE_MULT - MIN_FORCE_MULT) * (powerRatio * powerRatio);
-              ballVel.current = { x: dx * velocityMultiplier, y: dy * velocityMultiplier };
-          } else {
-              ballPos.current = { ...anchorPos.current };
-          }
+        const dx = anchorPos.current.x - ballPos.current.x, dy = anchorPos.current.y - ballPos.current.y;
+        const stretchDist = Math.sqrt(dx*dx + dy*dy);
+        if (stretchDist > 40) { // Mínimo de força para lançar
+            isFlying.current = true;
+            flightStartTime.current = performance.now();
+            const powerRatio = Math.min(stretchDist / MAX_DRAG_DIST, 1.0);
+            const velocityMultiplier = MIN_FORCE_MULT + (MAX_FORCE_MULT - MIN_FORCE_MULT) * (powerRatio * powerRatio);
+            ballVel.current = { x: dx * velocityMultiplier, y: dy * velocityMultiplier };
         } else {
-          ballPos.current = { ...anchorPos.current };
+            ballPos.current = { ...anchorPos.current };
         }
       }
 
@@ -435,30 +328,12 @@ const GeminiSlingshot: React.FC = () => {
                 checkMatches(nb);
                 updateAvailableColors();
                 ballPos.current = { ...anchorPos.current };
-                captureRequestRef.current = true;
             }
             if (ballPos.current.y > canvas.height) { isFlying.current = false; ballPos.current = { ...anchorPos.current }; }
         }
       }
 
       bubbles.current.forEach(b => { if (b.active) drawBubble(ctx, b.x, b.y, BUBBLE_RADIUS - 1, b.color); });
-      const currentAimTarget = aimTargetRef.current, thinking = isAiThinkingRef.current, currentSelected = selectedColorRef.current;
-      if ((currentAimTarget && !isFlying.current && (!aiRecommendedColor || aiRecommendedColor === currentSelected)) || thinking) {
-          ctx.save();
-          const hc = thinking ? '#a8c7fa' : COLOR_CONFIG[currentSelected].hex; 
-          ctx.shadowBlur = 15; ctx.shadowColor = hc;
-          ctx.beginPath(); ctx.moveTo(anchorPos.current.x, anchorPos.current.y);
-          if (currentAimTarget) ctx.lineTo(currentAimTarget.x, currentAimTarget.y);
-          else ctx.lineTo(anchorPos.current.x, anchorPos.current.y - 200);
-          ctx.setLineDash([20, 15]); ctx.lineDashOffset = -(performance.now() / 15) % 30;
-          ctx.strokeStyle = thinking ? 'rgba(168, 199, 250, 0.5)' : hc; ctx.lineWidth = 4; ctx.stroke();
-          if (currentAimTarget && !thinking) {
-              ctx.beginPath(); ctx.arc(currentAimTarget.x, currentAimTarget.y, BUBBLE_RADIUS, 0, Math.PI * 2);
-              ctx.setLineDash([5, 5]); ctx.strokeStyle = hc; ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fill(); ctx.stroke();
-          }
-          ctx.restore();
-      }
-      
       const bandColor = isPinching.current ? '#fdd835' : 'rgba(255,255,255,0.4)';
       if (!isFlying.current) {
         ctx.beginPath(); ctx.moveTo(anchorPos.current.x - 35, anchorPos.current.y - 10);
@@ -466,7 +341,6 @@ const GeminiSlingshot: React.FC = () => {
         ctx.lineWidth = 5; ctx.strokeStyle = bandColor; ctx.lineCap = 'round'; ctx.stroke();
       }
       ctx.save();
-      if (isLocked && !isFlying.current) ctx.globalAlpha = 0.5;
       drawBubble(ctx, ballPos.current.x, ballPos.current.y, BUBBLE_RADIUS, selectedColorRef.current);
       ctx.restore();
       if (!isFlying.current) {
@@ -486,15 +360,6 @@ const GeminiSlingshot: React.FC = () => {
           else { ctx.globalAlpha = p.life; ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill(); ctx.globalAlpha = 1.0; }
       }
       ctx.restore();
-
-      if (captureRequestRef.current) {
-        captureRequestRef.current = false;
-        const offscreen = document.createElement('canvas');
-        const scale = Math.min(1, 480 / canvas.width);
-        offscreen.width = canvas.width * scale; offscreen.height = canvas.height * scale;
-        const oCtx = offscreen.getContext('2d');
-        if (oCtx) { oCtx.drawImage(canvas, 0, 0, offscreen.width, offscreen.height); performAiAnalysis(offscreen.toDataURL("image/jpeg", 0.6)); }
-      }
     };
 
     if (window.Hands) {
@@ -509,14 +374,11 @@ const GeminiSlingshot: React.FC = () => {
     return () => { if (camera) camera.stop(); if (hands) hands.close(); };
   }, [initGrid]);
 
-  const recColorConfig = aiRecommendedColor ? COLOR_CONFIG[aiRecommendedColor] : null;
-  const borderColor = recColorConfig ? recColorConfig.hex : '#444746';
-
   return (
-    <div className="flex flex-col md:flex-row w-full h-screen bg-[#121212] overflow-hidden font-roboto text-[#e3e3e3]">
+    <div className="w-full h-screen bg-[#121212] overflow-hidden font-roboto text-[#e3e3e3]">
       
       {/* GAME AREA */}
-      <div ref={gameContainerRef} className="flex-1 relative h-full overflow-hidden order-1">
+      <div ref={gameContainerRef} className="relative h-full overflow-hidden">
         <video ref={videoRef} className="absolute hidden" playsInline />
         <canvas ref={canvasRef} className="absolute inset-0" />
 
@@ -529,15 +391,8 @@ const GeminiSlingshot: React.FC = () => {
             </div>
         )}
 
-        {isAiThinking && (
-          <div className="absolute left-1/2 -translate-x-1/2 z-50 flex flex-col items-center justify-center pointer-events-none" style={{ bottom: '220px', transform: 'translate(-50%, 50%)' }}>
-             <div className="w-[64px] h-[64px] rounded-full border-4 border-t-[#a8c7fa] border-r-[#a8c7fa] border-b-transparent border-l-transparent animate-spin" />
-             <p className="mt-4 text-[#a8c7fa] font-bold text-[10px] tracking-widest animate-pulse uppercase">Thinking...</p>
-          </div>
-        )}
-
-        {/* TOP HUD: Score & Sidebar Toggle */}
-        <div className="absolute top-4 left-4 right-4 z-40 flex justify-between items-start pointer-events-none">
+        {/* TOP HUD: Score */}
+        <div className="absolute top-4 left-4 right-4 z-40 flex justify-start items-start pointer-events-none">
             <div className="bg-[#1e1e1e]/90 p-3 rounded-2xl border border-[#444746] shadow-xl flex items-center gap-3 min-w-[120px] pointer-events-auto backdrop-blur-md">
                 <div className="bg-[#42a5f5]/20 p-2 rounded-full hidden sm:block">
                     <Trophy className="w-5 h-5 text-[#42a5f5]" />
@@ -547,13 +402,6 @@ const GeminiSlingshot: React.FC = () => {
                     <p className="text-xl sm:text-2xl font-bold text-white leading-none">{score.toLocaleString()}</p>
                 </div>
             </div>
-
-            <button 
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="bg-[#1e1e1e]/90 p-3 rounded-full border border-[#444746] shadow-xl text-[#e3e3e3] hover:bg-[#333] transition-colors pointer-events-auto backdrop-blur-md md:hidden"
-            >
-                {isSidebarOpen ? <X className="w-6 h-6" /> : <BrainCircuit className="w-6 h-6 text-[#a8c7fa]" />}
-            </button>
         </div>
 
         {/* BOTTOM HUD: Color Picker */}
@@ -564,7 +412,6 @@ const GeminiSlingshot: React.FC = () => {
                 ) : (
                     COLOR_KEYS.filter(c => availableColors.includes(c)).map(color => {
                         const isSelected = selectedColor === color;
-                        const isRecommended = aiRecommendedColor === color;
                         const config = COLOR_CONFIG[color];
                         return (
                             <button
@@ -576,9 +423,6 @@ const GeminiSlingshot: React.FC = () => {
                                 style={{ background: `radial-gradient(circle at 35% 35%, ${config.hex}, ${adjustColor(config.hex, -60)})` }}
                             >
                                 <div className="absolute top-2 left-3 w-3 h-1.5 bg-white/30 rounded-full transform -rotate-45" />
-                                {isRecommended && !isSelected && (
-                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-black text-[8px] font-black flex items-center justify-center rounded-full animate-bounce shadow-md">REC</span>
-                                )}
                                 {isSelected && <MousePointerClick className="w-5 h-5 text-white/80" />}
                             </button>
                         )
@@ -587,7 +431,7 @@ const GeminiSlingshot: React.FC = () => {
             </div>
         </div>
 
-        {!isPinching.current && !isFlying.current && !isAiThinking && (
+        {!isPinching.current && !isFlying.current && (
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none opacity-60">
                 <div className="flex items-center gap-2 bg-[#1e1e1e]/90 px-4 py-2 rounded-full border border-[#444746] backdrop-blur-sm">
                     <Play className="w-3 h-3 text-[#42a5f5] fill-current" />
@@ -595,91 +439,6 @@ const GeminiSlingshot: React.FC = () => {
                 </div>
             </div>
         )}
-      </div>
-
-      {/* STRATEGY & DEBUG PANEL */}
-      <div className={`
-        fixed md:static inset-0 md:w-[360px] lg:w-[400px] bg-[#1e1e1e] border-l border-[#444746] flex flex-col z-[60] transition-transform duration-300 ease-in-out order-2
-        ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
-      `}>
-        {/* Mobile Header */}
-        <div className="md:hidden flex items-center justify-between p-4 border-b border-[#444746] bg-[#252525]">
-            <div className="flex items-center gap-2">
-                <BrainCircuit className="w-5 h-5 text-[#a8c7fa]" />
-                <h2 className="font-bold text-sm tracking-widest uppercase">Gemini Strategy</h2>
-            </div>
-            <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-[#333] rounded-full"><X className="w-5 h-5" /></button>
-        </div>
-
-        {/* AI PANEL CONTENT */}
-        <div className="flex-1 overflow-y-auto">
-            <div className="p-5 border-b-4 transition-colors duration-500 flex flex-col gap-3" style={{ backgroundColor: '#252525', borderColor: borderColor }}>
-                 <div className="flex items-center justify-between">
-                    <h2 className="font-black text-xs tracking-[0.2em] uppercase" style={{ color: borderColor }}>Flash Co-Pilot</h2>
-                    {isAiThinking && <Loader2 className="w-4 h-4 animate-spin text-white/50" />}
-                 </div>
-                 <p className="text-white text-base leading-tight font-bold">{aiHint}</p>
-                 {aiRationale && (
-                     <div className="flex gap-2 p-3 bg-black/20 rounded-xl border border-white/5">
-                         <Lightbulb className="w-4 h-4 text-[#a8c7fa] shrink-0 mt-0.5" />
-                         <p className="text-[#a8c7fa] text-xs italic opacity-90 leading-snug">{aiRationale}</p>
-                     </div>
-                 )}
-                 {aiRecommendedColor && (
-                    <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-black/30 rounded-lg">
-                        <Target className="w-4 h-4 text-gray-400" />
-                        <span className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">Active Rec:</span>
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded" style={{ backgroundColor: COLOR_CONFIG[aiRecommendedColor].hex + '33', color: COLOR_CONFIG[aiRecommendedColor].hex }}>
-                            {COLOR_CONFIG[aiRecommendedColor].label}
-                        </span>
-                    </div>
-                 )}
-            </div>
-
-            <div className="p-4 space-y-6">
-                <div>
-                    <div className="flex items-center gap-2 mb-2 text-[#757575] text-[10px] font-black uppercase tracking-[0.2em]">
-                        <Terminal className="w-3 h-3" /> System Logs
-                    </div>
-                    <div className="bg-[#121212] p-3 rounded-xl border border-[#444746] font-mono text-[10px] text-gray-400 h-28 overflow-y-auto whitespace-pre-wrap leading-relaxed no-scrollbar">
-                        {debugInfo?.promptContext || 'Awaiting first analysis scan...'}
-                    </div>
-                </div>
-
-                {debugInfo?.screenshotBase64 && (
-                    <div>
-                        <div className="flex items-center gap-2 mb-2 text-[#757575] text-[10px] font-black uppercase tracking-[0.2em]">
-                            <Eye className="w-3 h-3" /> Visual Input
-                        </div>
-                        <div className="rounded-xl overflow-hidden border border-[#444746] bg-black/50 relative">
-                            <img src={debugInfo.screenshotBase64} alt="AI Vision" className="w-full h-auto opacity-70" />
-                            <div className="absolute bottom-0 inset-x-0 bg-black/60 p-2 text-[9px] text-center text-gray-500 font-mono">Sent to gemini-3-flash</div>
-                        </div>
-                    </div>
-                )}
-
-                {debugInfo && (
-                    <div className="grid grid-cols-2 gap-2">
-                         <div className="bg-[#2a2a2a] p-3 rounded-xl border border-[#444746]">
-                            <p className="text-[9px] text-gray-500 uppercase font-bold mb-1">Latency</p>
-                            <div className="text-[#a8c7fa] font-mono font-bold text-sm">{debugInfo.latency}ms</div>
-                         </div>
-                         <div className="bg-[#2a2a2a] p-3 rounded-xl border border-[#444746]">
-                            <p className="text-[9px] text-gray-500 uppercase font-bold mb-1">Accuracy</p>
-                            <div className="text-[#66bb6a] font-mono font-bold text-sm">Verified</div>
-                         </div>
-                    </div>
-                )}
-            </div>
-        </div>
-        
-        <div className="p-4 bg-[#252525] border-t border-[#444746] flex items-center justify-between">
-            <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">v2.0 // Gemini 3 Flash</p>
-            <div className="flex items-center gap-1.5">
-                <div className={`w-1.5 h-1.5 rounded-full ${isAiThinking ? 'bg-[#a8c7fa] animate-pulse' : 'bg-[#66bb6a]'}`} />
-                <span className="text-[9px] text-gray-400 font-bold uppercase">{isAiThinking ? 'Thinking' : 'Online'}</span>
-            </div>
-        </div>
       </div>
     </div>
   );

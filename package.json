@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^1.31.0",
     "@mediapipe/hands": "^0.4.1675469240",
     "lucide-react": "^0.556.0",
     "phaser": "^3.90.0",
