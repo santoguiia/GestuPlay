@@ -1,0 +1,24 @@
+# netlify.toml – GestuPlay deployment configuration
+
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+
+# ── Security headers ──────────────────────────────────────────────────────────
+# COOP + COEP are required for cross-origin isolation, which enables
+# SharedArrayBuffer and WASM threads used by MediaPipe.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy    = "same-origin"
+    Cross-Origin-Embedder-Policy  = "require-corp"
+    X-Frame-Options               = "DENY"
+    X-Content-Type-Options        = "nosniff"
+    Referrer-Policy               = "strict-origin-when-cross-origin"
+    Permissions-Policy            = "camera=(self), microphone=()"
+
+# ── SPA routing ──────────────────────────────────────────────────────────────
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
