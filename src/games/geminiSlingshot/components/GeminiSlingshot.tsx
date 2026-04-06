@@ -9,8 +9,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { Point, Bubble, Particle, BubbleColor } from '../types';
 import { Loader2, Trophy, Play, MousePointerClick } from 'lucide-react';
 
-const GRAB_THRESHOLD = 0.05; // Limite para agarrar (dedos bem próximos)
-const RELEASE_THRESHOLD = 0.12; // Limite para soltar (mais folgado para evitar erros)
+const GRAB_THRESHOLD = 0.065; // Limite para agarrar (dedos próximos)
+const RELEASE_THRESHOLD = 0.14; // Limite para soltar (histerese)
 const HAND_LOSS_TOLERANCE = 3; // Quantos frames a mão pode sumir antes de soltar a bola
 
 const FRICTION = 0.998; 
@@ -19,6 +19,7 @@ const BUBBLE_RADIUS = 22;
 const ROW_HEIGHT = BUBBLE_RADIUS * Math.sqrt(3);
 const GRID_COLS = 12;
 const GRID_ROWS = 8;
+const GRID_TOP_OFFSET = 20;
 const SLINGSHOT_BOTTOM_OFFSET = 220;
 
 const MAX_DRAG_DIST = 180;
@@ -63,6 +64,7 @@ const GeminiSlingshot: React.FC = () => {
   const bubbles = useRef<Bubble[]>([]);
   const particles = useRef<Particle[]>([]);
   const scoreRef = useRef<number>(0);
+  const frameInFlightRef = useRef(false);
 
   const selectedColorRef = useRef<BubbleColor>('red');
   
@@ -79,7 +81,7 @@ const GeminiSlingshot: React.FC = () => {
     const xOffset = (width - (GRID_COLS * BUBBLE_RADIUS * 2)) / 2 + BUBBLE_RADIUS;
     const isOdd = row % 2 !== 0;
     const x = xOffset + col * (BUBBLE_RADIUS * 2) + (isOdd ? BUBBLE_RADIUS : 0);
-    const y = BUBBLE_RADIUS + row * ROW_HEIGHT;
+    const y = GRID_TOP_OFFSET + BUBBLE_RADIUS + row * ROW_HEIGHT;
     return { x, y };
   };
 
@@ -187,7 +189,7 @@ const GeminiSlingshot: React.FC = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const container = gameContainerRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
     canvas.width = container.clientWidth;
@@ -209,9 +211,6 @@ const GeminiSlingshot: React.FC = () => {
       }
       ctx.save();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(18, 18, 18, 0.85)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       let handPos: Point | null = null;
       let pinchDist = 1.0;
@@ -243,7 +242,7 @@ const GeminiSlingshot: React.FC = () => {
         if (!isPinching.current) {
           // Só começa a segurar se os dedos estiverem MUITO próximos e perto da bola
           const distToBall = Math.sqrt(Math.pow(handPos.x - ballPos.current.x, 2) + Math.pow(handPos.y - ballPos.current.y, 2));
-          if (pinchDist < GRAB_THRESHOLD && distToBall < 120) {
+          if (pinchDist < GRAB_THRESHOLD && distToBall < 140) {
             isPinching.current = true;
           }
         } else {
@@ -362,16 +361,36 @@ const GeminiSlingshot: React.FC = () => {
       ctx.restore();
     };
 
-    if (window.Hands) {
-      hands = new window.Hands({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-      hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    const HandsCtor = window.Hands ?? (globalThis as any).Hands;
+    const CameraCtor = window.Camera ?? (globalThis as any).Camera;
+    if (HandsCtor) {
+      hands = new HandsCtor({ locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}` });
+      hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.55, minTrackingConfidence: 0.55 });
       hands.onResults(onResults);
-      if (window.Camera) {
-        camera = new window.Camera(video, { onFrame: async () => { if (videoRef.current && hands) await hands.send({ image: videoRef.current }); }, width: 1280, height: 720 });
+      if (CameraCtor) {
+        camera = new CameraCtor(video, {
+          onFrame: async () => {
+            if (!videoRef.current || !hands || frameInFlightRef.current) return;
+            frameInFlightRef.current = true;
+            try {
+              await hands.send({ image: videoRef.current });
+            } finally {
+              frameInFlightRef.current = false;
+            }
+          },
+          width: 960,
+          height: 540
+        });
         camera.start();
       }
+    } else {
+      setLoading(false);
     }
-    return () => { if (camera) camera.stop(); if (hands) hands.close(); };
+    return () => {
+      frameInFlightRef.current = false;
+      if (camera) camera.stop();
+      if (hands) hands.close();
+    };
   }, [initGrid]);
 
   return (
@@ -379,8 +398,14 @@ const GeminiSlingshot: React.FC = () => {
       
       {/* GAME AREA */}
       <div ref={gameContainerRef} className="relative h-full overflow-hidden">
-        <video ref={videoRef} className="absolute hidden" playsInline />
-        <canvas ref={canvasRef} className="absolute inset-0" />
+        <video
+          ref={videoRef}
+          className="absolute inset-0 z-0 w-full h-full object-cover opacity-45 pointer-events-none"
+          playsInline
+          muted
+          autoPlay
+        />
+        <canvas ref={canvasRef} className="absolute inset-0 z-10" />
 
         {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-[#121212] z-50">
