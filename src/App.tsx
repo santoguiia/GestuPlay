@@ -20,7 +20,7 @@ import "./App.css";
 type AppState = "idle" | "loading" | "playing" | "error";
 
 const GAMES: { id: string; label: string; factory: () => IGestuGame }[] = [
-  { id: "slingshot", label: "🎯 Gemini Slingshot", factory: () => new SlingshotGame() },
+  { id: "slingshot", label: "🎯 Bubble Slingshot", factory: () => new SlingshotGame() },
 ];
 
 export default function App() {
