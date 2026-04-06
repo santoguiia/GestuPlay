@@ -61,3 +61,37 @@ npm run preview
 - Todo o processamento de imagem ocorre **no navegador** via MediaPipe WASM.
 - O `netlify.toml` inclui os headers `COOP`/`COEP` obrigatórios para isolamento cross-origin.
 - Deploy estático compatível com **Netlify** (custo zero de servidor).
+
+## 🎨 Referência de Design (Hub)
+
+Exemplo de direção visual moderna para o hub:
+
+- **Inspiração:** GitHub dashboard + Vercel + Notion
+- **Layout:** painel central com borda sutil, fundo com gradiente escuro e orbs desfocados
+- **Hierarquia:** título forte, subtítulo curto, tags de contexto (Local Processing / MediaPipe / Zero Server Cost)
+- **Microinterações:** hover com elevação, transições suaves e animação de entrada do painel
+- **Responsividade:** conteúdo fluido com `clamp()`, grid/flex adaptativo e espaçamento consistente
+
+## 🧠 Melhorias de Precisão para Visão Computacional
+
+Problemas comuns de inconsistência (abrir/fechar mão):
+
+- iluminação ruim ou contra-luz
+- FPS baixo/instável
+- thresholds sem histerese (chattering)
+- ruído de landmark frame-a-frame
+- perda de tracking em movimentos rápidos
+
+Melhorias aplicadas no MVP:
+
+- suavização temporal da distância de pinça (EMA local)
+- histerese de gesto (threshold de fechar diferente do de abrir)
+- debounce por frames consecutivos para confirmar mudança de estado
+- ajuste de captura para melhor FPS (`ideal` 60) e tracking confidence maior
+
+Melhorias recomendadas para próximos passos:
+
+- usar métrica combinada (distância + ângulo dos dedos + velocidade)
+- adicionar estado explícito de `tracking_lost` com timeout curto
+- calibrar thresholds por usuário (fase de setup de 3-5s)
+- migrar para solução com modelos mais robustos (ex.: MediaPipe Tasks Vision / hand-landmarker com pipeline dedicado)

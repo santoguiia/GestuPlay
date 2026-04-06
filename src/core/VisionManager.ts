@@ -73,7 +73,12 @@ export class VisionManager {
 
     // 1. Acquire webcam
     this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480, facingMode: "user" },
+      video: {
+        width: { ideal: 960 },
+        height: { ideal: 540 },
+        frameRate: { ideal: 60, min: 24 },
+        facingMode: "user",
+      },
       audio: false,
     });
 
@@ -94,8 +99,8 @@ export class VisionManager {
     this.hands.setOptions({
       maxNumHands: 1,
       modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.5,
+      minDetectionConfidence: 0.65,
+      minTrackingConfidence: 0.65,
     });
 
     this.hands.onResults((results: Results) => {
@@ -184,4 +189,3 @@ export class VisionManager {
     });
   }
 }
-

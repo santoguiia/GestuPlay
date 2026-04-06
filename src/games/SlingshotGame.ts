@@ -41,7 +41,9 @@ interface Target {
 }
 
 const GRAVITY = 0.25;
-const GRAB_THRESHOLD_NORM = 0.08; // normalised distance to trigger grab
+const PINCH_CLOSE_THRESHOLD = 0.07; // closes the gesture
+const PINCH_OPEN_THRESHOLD = 0.095; // opens the gesture (hysteresis)
+const PINCH_STABLE_FRAMES = 3; // debounce frames
 
 export class SlingshotGame implements IGestuGame {
   private canvas!: HTMLCanvasElement;
@@ -65,6 +67,10 @@ export class SlingshotGame implements IGestuGame {
   // Hand positions (canvas coords)
   private thumbPos: Vec2 | null = null;
   private indexPos: Vec2 | null = null;
+  private pinchFiltered = PINCH_OPEN_THRESHOLD;
+  private pinchClosed = false;
+  private pinchCloseCounter = 0;
+  private pinchOpenCounter = 0;
 
   // ── IGestuGame ──────────────────────────────────────────────────────────────
 
@@ -82,6 +88,10 @@ export class SlingshotGame implements IGestuGame {
       this.thumbPos = null;
       this.indexPos = null;
       this.grabbed = false;
+      this.pinchClosed = false;
+      this.pinchCloseCounter = 0;
+      this.pinchOpenCounter = 0;
+      this.pinchFiltered = PINCH_OPEN_THRESHOLD;
     } else {
       // Map normalised [0,1] → canvas pixels (mirror X for natural feel)
       const map = (nx: number, ny: number): Vec2 => ({
@@ -92,18 +102,43 @@ export class SlingshotGame implements IGestuGame {
       this.thumbPos = map(landmarks[THUMB_TIP].x, landmarks[THUMB_TIP].y);
       this.indexPos = map(landmarks[INDEX_TIP].x, landmarks[INDEX_TIP].y);
 
-      const pinchDist =
+      const pinchDistRaw =
         Math.hypot(
           landmarks[THUMB_TIP].x - landmarks[INDEX_TIP].x,
           landmarks[THUMB_TIP].y - landmarks[INDEX_TIP].y
         );
+      this.pinchFiltered = this.pinchFiltered * 0.7 + pinchDistRaw * 0.3;
+
+      if (!this.pinchClosed) {
+        if (this.pinchFiltered < PINCH_CLOSE_THRESHOLD) {
+          this.pinchCloseCounter++;
+          this.pinchOpenCounter = 0;
+          if (this.pinchCloseCounter >= PINCH_STABLE_FRAMES) {
+            this.pinchClosed = true;
+            this.pinchCloseCounter = 0;
+          }
+        } else {
+          this.pinchCloseCounter = 0;
+        }
+      } else {
+        if (this.pinchFiltered > PINCH_OPEN_THRESHOLD) {
+          this.pinchOpenCounter++;
+          this.pinchCloseCounter = 0;
+          if (this.pinchOpenCounter >= PINCH_STABLE_FRAMES) {
+            this.pinchClosed = false;
+            this.pinchOpenCounter = 0;
+          }
+        } else {
+          this.pinchOpenCounter = 0;
+        }
+      }
 
       const midpoint: Vec2 = {
         x: (this.thumbPos.x + this.indexPos.x) / 2,
         y: (this.thumbPos.y + this.indexPos.y) / 2,
       };
 
-      if (pinchDist < GRAB_THRESHOLD_NORM) {
+      if (this.pinchClosed) {
         if (!this.grabbed && !this.ball.active) {
           // Start grabbing – snap to current midpoint
           this.grabbed = true;

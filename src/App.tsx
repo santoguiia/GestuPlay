@@ -63,29 +63,53 @@ export default function App() {
       {/* ── Screen: Idle / Hub ─────────────────────────────────────────────── */}
       {appState === "idle" && (
         <div className="screen screen--hub">
-          <header className="hub__header">
-            <h1 className="hub__title">
-              <span className="hub__logo">🖐</span> GestuPlay
-            </h1>
-            <p className="hub__subtitle">
-              Control games with your hands — no controller needed.
-            </p>
-          </header>
+          <div className="hub__bg-orb hub__bg-orb--left" aria-hidden="true" />
+          <div className="hub__bg-orb hub__bg-orb--right" aria-hidden="true" />
 
-          <div className="hub__games">
-            {GAMES.map((g) => (
-              <DwellButton
-                key={g.id}
-                label={g.label}
-                onClick={() => startGame(g.id)}
-              />
-            ))}
+          <div className="hub__panel">
+            <header className="hub__header">
+              <p className="hub__repo">
+                Base game reference:{" "}
+                <a
+                  href="https://github.com/Sengwamana/Motion-Shot/tree/main"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Sengwamana / Motion-Shot
+                </a>
+              </p>
+
+              <h1 className="hub__title">
+                <span className="hub__logo">🖐</span> GestuPlay
+              </h1>
+              <p className="hub__subtitle">
+                A low-latency gesture gaming hub inspired by modern dashboards.
+              </p>
+            </header>
+
+            <div className="hub__meta">
+              <span>Local Processing</span>
+              <span>MediaPipe Hands</span>
+              <span>Zero Server Cost</span>
+            </div>
+
+            <div className="hub__games">
+              {GAMES.map((g) => (
+                <DwellButton
+                  key={g.id}
+                  label={g.label}
+                  onClick={() => startGame(g.id)}
+                />
+              ))}
+            </div>
+
+            <footer className="hub__footer">
+              <p>Point your index finger at a button and hold to select.</p>
+              <p className="hub__privacy">
+                🔒 All processing happens locally — no data leaves your device.
+              </p>
+            </footer>
           </div>
-
-          <footer className="hub__footer">
-            <p>Point your index finger at a button and hold to select.</p>
-            <p className="hub__privacy">🔒 All processing happens locally — no data leaves your device.</p>
-          </footer>
         </div>
       )}
 
