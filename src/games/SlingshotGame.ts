@@ -208,9 +208,26 @@ export class SlingshotGame implements IGestuGame {
     const w = this.canvas.width;
     const h = this.canvas.height;
 
-    // Background
-    ctx.fillStyle = "#1a1a2e";
+    // Semi-transparent overlay to keep camera visible beneath the game
+    ctx.fillStyle = "rgba(10, 14, 30, 0.52)";
     ctx.fillRect(0, 0, w, h);
+
+    // Subtle texture/grid
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+    ctx.lineWidth = 1;
+    const step = 48;
+    for (let x = 0; x < w; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+    for (let y = 0; y < h; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
 
     this.drawTargets(ctx);
     this.drawSlingshot(ctx);

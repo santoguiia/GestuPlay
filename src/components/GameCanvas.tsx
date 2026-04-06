@@ -14,6 +14,24 @@ interface GameCanvasProps {
 
 export function GameCanvas({ game }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const bgVideo = videoRef.current;
+    const sourceVideo = VisionManager.getInstance().getVideo();
+    const stream = sourceVideo?.srcObject ?? null;
+    if (!bgVideo || !stream) return;
+
+    bgVideo.srcObject = stream;
+    bgVideo.play().catch(() => {
+      // autoplay may be blocked in rare environments
+    });
+
+    return () => {
+      bgVideo.pause();
+      bgVideo.srcObject = null;
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -54,5 +72,18 @@ export function GameCanvas({ game }: GameCanvasProps) {
     };
   }, [game]);
 
-  return <canvas ref={canvasRef} className="game-canvas" />;
+  return (
+    <div className="game-stage">
+      <video
+        ref={videoRef}
+        className="game-stage__camera"
+        autoPlay
+        playsInline
+        muted
+        aria-hidden="true"
+      />
+      <div className="game-stage__overlay" aria-hidden="true" />
+      <canvas ref={canvasRef} className="game-canvas" />
+    </div>
+  );
 }

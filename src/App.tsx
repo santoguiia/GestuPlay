@@ -68,19 +68,8 @@ export default function App() {
 
           <div className="hub__panel">
             <header className="hub__header">
-              <p className="hub__repo">
-                Base game reference:{" "}
-                <a
-                  href="https://github.com/Sengwamana/Motion-Shot/tree/main"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Sengwamana / Motion-Shot
-                </a>
-              </p>
-
               <h1 className="hub__title">
-                <span className="hub__logo">🖐</span> GestuPlay
+                GestuPlay
               </h1>
               <p className="hub__subtitle">
                 A low-latency gesture gaming hub inspired by modern dashboards.
