@@ -1,0 +1,55 @@
+.dwell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 160px;
+  min-height: 80px;
+  background: rgba(0, 212, 255, 0.08);
+  border: 2px solid rgba(0, 212, 255, 0.35);
+  border-radius: 12px;
+  color: #e0f7ff;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  overflow: hidden;
+}
+
+.dwell-btn:hover,
+.dwell-btn--hovering {
+  background: rgba(0, 212, 255, 0.18);
+  border-color: rgba(0, 212, 255, 0.8);
+}
+
+.dwell-btn--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dwell-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.dwell-ring__bg {
+  fill: none;
+  stroke: rgba(0, 212, 255, 0.12);
+  stroke-width: 4;
+}
+
+.dwell-ring__progress {
+  fill: none;
+  stroke: #00d4ff;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s linear;
+}
+
+.dwell-btn__label {
+  position: relative;
+  z-index: 1;
+}
