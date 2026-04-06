@@ -28,7 +28,7 @@ export class EMAFilter {
   }
 
   /** Reset internal state (e.g. when the hand disappears). */
-  reset() {
+  reset(): void {
     this.x = null;
     this.y = null;
   }
